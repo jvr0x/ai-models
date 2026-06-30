@@ -1,0 +1,6 @@
+runtime: llama
+model: "Nex-N2-Pro-IQ1_M/IQ1_M/Nex-397B-A17B-IQ1_M-00001-of-00005.gguf"
+port: 8104
+ctx: 65536
+display_name: "Nex-N2-Pro 397B-A17B (IQ1_M)"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

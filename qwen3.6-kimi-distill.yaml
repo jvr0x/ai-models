@@ -1,0 +1,6 @@
+runtime: llama
+model: "lordx64/Qwen3.6-35B-A3B-Kimi-K2.6-Reasoning-Distilled-GGUF/Qwen3.6-35B-A3B-Kimi-K2.6-Reasoning-Distilled.Q8_0.gguf"
+port: 8100
+ctx: 262144
+display_name: "Qwen3.6-35B Kimi-K2.6 Distilled Q8"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

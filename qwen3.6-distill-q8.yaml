@@ -1,0 +1,6 @@
+runtime: llama
+model: "lordx64/Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-Q8_0-GGUF/Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled.Q8_0.gguf"
+port: 8099
+ctx: 262144
+display_name: "Qwen3.6-35B Distilled Q8"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

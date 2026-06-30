@@ -1,0 +1,6 @@
+runtime: vllm
+model: "nvidia/Gemma-4-31B-IT-NVFP4"
+port: 8107
+ctx: 8192
+display_name: "Gemma-4-31B-IT"
+runtime: "vllm"

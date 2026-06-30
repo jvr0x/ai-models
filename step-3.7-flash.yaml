@@ -1,0 +1,7 @@
+runtime: llama
+model: "unsloth/Step-3.7-Flash-GGUF/UD-IQ4_XS/Step-3.7-Flash-UD-IQ4_XS-00001-of-00003.gguf"
+port: 8098
+ctx: 262144
+display_name: "Step-3.7-Flash (IQ4_XS)"
+mmproj: "unsloth/Step-3.7-Flash-GGUF/mmproj-BF16.gguf"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

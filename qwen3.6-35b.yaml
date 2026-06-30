@@ -1,0 +1,11 @@
+runtime: llama
+model: "unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
+port: 8089
+ctx: 262144
+display_name: "Qwen3.6-35B-A3B"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]
+# Always-on Hermes main model: run as a persistent systemd user unit
+# (lmswitch@qwen3.6-35b.service) so it survives the launching shell/SSH session
+# being torn down (a bare process kept getting SIGTERM'd with the scope) and
+# auto-restarts on any exit. 2026-06-27.
+restart: always

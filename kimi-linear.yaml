@@ -1,0 +1,6 @@
+runtime: llama
+model: "bartowski/moonshotai_Kimi-Linear-48B-A3B-Instruct-GGUF/moonshotai_Kimi-Linear-48B-A3B-Instruct-Q8_0/moonshotai_Kimi-Linear-48B-A3B-Instruct-Q8_0-00001-of-00002.gguf"
+port: 8095
+ctx: 262144
+display_name: "Kimi-Linear-48B Q8"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

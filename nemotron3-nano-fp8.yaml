@@ -1,0 +1,10 @@
+runtime: vllm
+model: "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8"
+port: 8110
+ctx: 131072
+display_name: "Nemotron-3-Nano-30B FP8"
+runtime: "vllm"
+gpu_memory_utilization: 0.60
+tool_call_parser: "qwen3_coder"
+reasoning_parser_plugin: "nano_v3_reasoning_parser.py"
+trust_remote_code: 1

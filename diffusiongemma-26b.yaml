@@ -1,0 +1,15 @@
+runtime: vllm
+model: "nvidia/diffusiongemma-26B-A4B-it-NVFP4"
+port: 8106
+ctx: 262144
+display_name: "DiffusionGemma-26B-IT"
+runtime: "vllm"
+image: "vllm/vllm-openai:gemma-aarch64-cu130"
+gpu_memory_utilization: 0.22
+tool_call_parser: "gemma4"
+reasoning_parser: "gemma4"
+trust_remote_code: 1
+no_chat_template: 1
+attention_backend: "TRITON_ATTN"
+max_num_seqs: "4"
+load_format: "auto"

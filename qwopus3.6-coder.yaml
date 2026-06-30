@@ -1,0 +1,7 @@
+runtime: llama
+model: "Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF/Qwopus3.6-27B-Coder-MTP-Q8_0.gguf"
+port: 8103
+ctx: 131072
+display_name: "Qwopus3.6-27B Coder MTP (Q8_0)"
+mmproj: "Jackrong/Qwopus3.6-27B-Coder-MTP-GGUF/mmproj-F32.gguf"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

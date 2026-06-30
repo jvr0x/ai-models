@@ -1,0 +1,24 @@
+runtime: vllm
+model: "Qwen-AgentWorld-35B-A3B"
+port: 8118
+ctx: 131072
+display_name: "Qwen-AgentWorld-35B-A3B"
+# 65GB bf16 weights -> needs most of the GB10 to itself; can't coexist with a
+# large llama-server. Stop other big models before starting this.
+gpu_memory_utilization: 0.85
+# qwen3_5_moe family: same tool/reasoning parsers as the qwen3.6-35b sibling.
+tool_call_parser: "qwen3_coder"
+reasoning_parser: "qwen3"
+# --language-model-only is REQUIRED: the checkpoint is text-only (config.json sets
+# language_model_only: true and ships zero visual.* tensors), but the qwen3_5_moe
+# architecture still declares a vision tower. Without the CLI flag vLLM builds that
+# tower and aborts with "Following weights were not initialized from checkpoint:
+# {visual.*}". The config.json field alone is not honored — only the flag is.
+# --max-num-batched-tokens is REQUIRED >= the Mamba block size: this is a hybrid
+# linear-attention (gated-delta-net) model, and vLLM's "Mamba cache align mode"
+# asserts block_size (2096) <= max_num_batched_tokens. The default prefill budget
+# is 2048, which fails the assert by 48 tokens; 4096 clears it with headroom.
+# Agentic-serving optimizations: prefix caching reuses the (large, static) system
+# + tool-definition prefix across turns; fp8 KV cache (native on Blackwell) ~doubles
+# usable context within the KV budget left after the 65GB of weights.
+extra_args: ["--language-model-only", "--max-num-batched-tokens", "4096", "--enable-prefix-caching", "--kv-cache-dtype", "fp8"]

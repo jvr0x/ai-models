@@ -1,0 +1,6 @@
+runtime: llama
+model: "unsloth/Qwen3-Coder-Next-GGUF/Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
+port: 8091
+ctx: 262144
+display_name: "Qwen3-Coder-Next Q4"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

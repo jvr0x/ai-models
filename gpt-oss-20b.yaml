@@ -1,0 +1,6 @@
+runtime: llama
+model: "openai/gpt-oss-20b-GGUF/gpt-oss-20b-UD-Q4_K_XL.gguf"
+port: 8086
+ctx: 131072
+display_name: "GPT-OSS-20B"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

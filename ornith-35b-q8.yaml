@@ -1,0 +1,6 @@
+runtime: llama
+model: "ornith/Ornith-1.0-35B-Q8_0/ornith-1.0-35b-Q8_0.gguf"
+port: 8115
+ctx: 262144
+display_name: "Ornith-1.0-35B Q8"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

@@ -1,0 +1,60 @@
+runtime: vllm
+model: "AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4"
+port: 8120
+ctx: 262144
+display_name: "Qwen3.6-35B heretic NVFP4 +DFlash"
+
+# Custom GB10/sm_121a (Blackwell) vLLM build that ships the `dflash`
+# speculative-decoding method. Hardware-locked to DGX Spark — won't run on
+# H100/A100/B200/desktop GPUs. Needs NVIDIA driver >= 580.x.
+image: "ghcr.io/aeon-7/aeon-vllm-ultimate:latest"
+
+# This image's ENTRYPOINT is /bin/bash (not `vllm serve` like the official
+# image), so without this lmswitch would run `bash <model_dir>` -> exit 126
+# "Is a directory". `entrypoint:` sets `--entrypoint vllm` + prepends `serve`.
+entrypoint: "vllm serve"
+
+# The aeon recipes require these GB10/sm_121a NVFP4 env vars in the container
+# (VLLM_TEST_FORCE_FP8_MARLIN pins the NVFP4 MoE backend to MARLIN).
+env:
+  TORCH_CUDA_ARCH_LIST: "12.1a"
+  ENABLE_NVFP4_SM100: "0"
+  NVIDIA_FORWARD_COMPAT: "1"
+  VLLM_TEST_FORCE_FP8_MARLIN: "1"
+  VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+
+# Full README throughput/context values. 0.85 = ~104 GB of the 122 GB unified
+# pool, so this model needs the GPU TO ITSELF — stop the always-on llama-servers
+# first or it will OOM / swap:
+#   lmswitch off qwen3.6-35b   (and any other running model)  then  lmswitch on this
+gpu_memory_utilization: 0.85
+max_num_seqs: 64
+
+# README wants CUDA graphs ON for DFlash throughput (it never passes
+# --enforce-eager). Flip to true if graph capture fails on load.
+enforce_eager: false
+
+tool_call_parser: "qwen3_coder"     # Qwen3 XML tool calls
+reasoning_parser: "qwen3"           # split <think> reasoning_content
+trust_remote_code: true
+attention_backend: "flash_attn"     # main model; drafter keeps its default
+limit_mm_per_prompt: '{"image":4,"video":2}'   # vLLM 0.23 wants JSON, not the image=4,video=2 shorthand
+
+# extra_args run INSIDE the container, appended last.
+#  - NVFP4 weights are compressed-tensors (not modelopt) -> --quantization compressed-tensors
+#  - DFlash drafter: AEON-7/AEON-DFlash-Qwen3.6-35B-A3B (all-full-attention).
+#    VERIFIED 2026-06-28: the z-lab/Qwen3.6-35B-A3B-DFlash drafter's sliding-window
+#    attention trips `assert new_spec.page_size_bytes == max_page_size` in
+#    profile_cudagraph_memory (the KV-page assert the Ornith patch warns about) —
+#    the all-full-attention AEON drafter avoids it AND has higher acceptance.
+#    Referenced by HF id; lmswitch mounts ~/.cache/huggingface/hub so vLLM resolves it.
+extra_args:
+  - "--quantization"
+  - "compressed-tensors"
+  - "--max-num-batched-tokens"
+  - "32768"                         # README: DFlash needs this >= seqs*spec budget or it boots with a negative token budget
+  - "--enable-chunked-prefill"
+  - "--enable-prefix-caching"
+  - "--speculative-config"
+  - '{"method":"dflash","model":"AEON-7/AEON-DFlash-Qwen3.6-35B-A3B","num_speculative_tokens":6}'

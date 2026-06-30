@@ -1,0 +1,6 @@
+runtime: vllm
+model: "google/gemma-4-26B-A4B-it"
+port: 8112
+ctx: 131072
+display_name: "Gemma-4-26B-A4B Instruct"
+runtime: "vllm"

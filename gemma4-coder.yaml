@@ -1,0 +1,6 @@
+runtime: llama
+model: "yuxinlu1/gemma-4-12B-coder-fable5-composer2.5-v1-GGUF/gemma4-coding-Q8_0.gguf"
+port: 8096
+ctx: 262144
+display_name: "Gemma-4-12B Coder"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

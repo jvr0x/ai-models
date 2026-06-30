@@ -1,0 +1,6 @@
+runtime: llama
+model: "nemotron3-gguf/Nemotron-3-Nano-30B-A3B-UD-Q8_K_XL.gguf"
+port: 8083
+ctx: 65536
+display_name: "Nemotron-Nano-30B"
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]
