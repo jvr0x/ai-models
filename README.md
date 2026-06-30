@@ -1,6 +1,17 @@
-# ai-models
+```
+██╗     ███╗   ███╗███████╗██╗    ██╗██╗████████╗ ██████╗██╗  ██╗
+██║     ████╗ ████║██╔════╝██║    ██║██║╚══██╔══╝██╔════╝██║  ██║
+██║     ██╔████╔██║███████╗██║ █╗ ██║██║   ██║   ██║     ███████║
+██║     ██║╚██╔╝██║╚════██║██║███╗██║██║   ██║   ██║     ██╔══██║
+███████╗██║ ╚═╝ ██║███████║╚███╔███╔╝██║   ██║   ╚██████╗██║  ██║
+╚══════╝╚═╝     ╚═╝╚══════╝ ╚══╝╚══╝ ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝
+```
 
-> YAML recipes for [lmswitch](https://github.com/jvr0x/lmswitch)
+# lmswitch · ai-models
+
+> YAML recipes · local LLM switching · GGUF + vLLM
+
+Pre-built, production-tested YAML configurations for [lmswitch](https://github.com/jvr0x/lmswitch) users. Drop any of these into your `ai-models/` directory and `lmswitch` will detect, parse, and serve them immediately.
 
 Pre-built, production-tested YAML configurations for local LLMs. Drop any of these into `ai-models/<name>.yaml` and `lmswitch` will detect, parse, and serve them immediately.
 
