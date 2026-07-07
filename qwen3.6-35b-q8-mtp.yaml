@@ -1,0 +1,22 @@
+runtime: llama
+model: "unsloth/Qwen3.6-35B-A3B-MTP-GGUF/Qwen3.6-35B-A3B-UD-Q8_K_XL.gguf"
+port: 8089
+ctx: 262144
+display_name: "Qwen3.6-35B-A3B Q8 MTP"
+mmproj: "unsloth/Qwen3.6-35B-A3B-MTP-GGUF/mmproj-BF16.gguf"
+# 2048/2048 batches: GB10 is compute-rich/bandwidth-poor; large ubatch is the
+# big prefill win for A3B MoE. --jinja: native Qwen tool-call template.
+# --cache-reuse: partial KV prefix reuse for agent loops. temp/top-p/top-k:
+# Qwen thinking-mode recommended defaults for clients that don't set their own.
+batch: 2048
+ubatch: 2048
+# MTP speculative decoding per MiaAI-Lab DGX-Spark recipe (this gguf embeds the
+# MTP draft head; verified 2026-07-06: ~93% draft acceptance, ~62 tok/s tg).
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0", "--jinja", "--cache-reuse", "256", "--temp", "0.6", "--top-p", "0.95", "--top-k", "20",
+  "--spec-type", "draft-mtp", "--spec-draft-n-max", "6", "--spec-draft-p-min", "0.85",
+  "--chat-template-kwargs", "{\"preserve_thinking\": true}"]
+# Always-on Hermes/opencode main model: persistent systemd user unit
+# (lmswitch@qwen3.6-35b-q8-mtp.service), auto-restarts on any exit.
+# 2026-07-06: promoted to main on port 8089, replacing the plain-Q8 profile
+# (qwen3.6-35b-q8.yaml, non-MTP gguf deleted).
+restart: always

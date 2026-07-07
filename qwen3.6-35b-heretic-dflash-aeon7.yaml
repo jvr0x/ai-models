@@ -28,7 +28,7 @@ env:
 # pool, so this model needs the GPU TO ITSELF — stop the always-on llama-servers
 # first or it will OOM / swap:
 #   lmswitch off qwen3.6-35b   (and any other running model)  then  lmswitch on this
-gpu_memory_utilization: 0.85
+gpu_memory_utilization: 0.8
 max_num_seqs: 64
 
 # README wants CUDA graphs ON for DFlash throughput (it never passes

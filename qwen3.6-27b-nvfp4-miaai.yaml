@@ -1,0 +1,46 @@
+# Faithful port of MiaAI-Lab/Qwen3.6-27B-NVFP4-vLLM start.sh, as a lmswitch recipe.
+# Source: https://github.com/MiaAI-Lab/Qwen3.6-27B-NVFP4-vLLM  (their `start.sh`)
+# Kept as-is for A/B testing vs qwen3.6-27b-nvfp4-aeon7 (DFlash n=10). Differences
+# from our AEON recipe that are DELIBERATE (repo values): stock vLLM nightly image,
+# STOCK nvidia checkpoint (not the AEON uncensored one), MTP n=3 instead of DFlash,
+# flashinfer backend, marlin MoE, gpu_mem 0.4 / 4 seqs (their coexist profile).
+#
+# CAVEAT: the repo runs no GB10 arch env (TORCH_CUDA_ARCH_LIST / CUTE_DSL_ARCH) and
+# the stock image — our 35B recipe's comment flags stock nightly as too old to load
+# qwen3_5_moe on sm_121a. If it fails to load, that's the reason; not a typo here.
+runtime: vllm
+model: "nvidia/Qwen3.6-27B-NVFP4"      # resolves to ~/models/nvidia/Qwen3.6-27B-NVFP4 (present)
+port: 8124
+ctx: 262144                            # --max-model-len
+display_name: "Qwen3.6-27B NVFP4 (MiaAI-Lab repo config)"
+
+# Repo uses the STOCK image (their start.sh: vllm/vllm-openai:nightly). Stock image
+# already has `vllm serve` as entrypoint, so no entrypoint:/env: overrides.
+image: "vllm/vllm-openai:nightly"
+
+gpu_memory_utilization: 0.4            # --gpu-memory-utilization
+max_num_seqs: 4                        # --max-num-seqs
+attention_backend: "flashinfer"        # --attention-backend
+load_format: "fastsafetensors"         # --load-format (startup speed only)
+tool_call_parser: "qwen3_coder"        # adds --enable-auto-tool-choice --tool-call-parser
+reasoning_parser: "qwen3"              # --reasoning-parser
+trust_remote_code: true                # --trust-remote-code
+enforce_eager: false                   # repo omits --enforce-eager => CUDA graphs ON.
+                                       # lmswitch DEFAULTS this to true, so set false to match.
+
+# Repo passes --chat-template chat_template.jinja; the local checkpoint ships its own
+# chat_template.jinja in the (mounted) model dir, so we let vLLM auto-load it.
+# no_chat_template stays unset; add `no_chat_template: true` if the built-in misbehaves.
+
+# Remaining repo flags with no first-class lmswitch key. tensor-parallel-size 1 is the
+# hardcoded default, so it's omitted.
+extra_args:
+  - "--moe-backend"
+  - "marlin"
+  - "--max-num-batched-tokens"
+  - "8192"
+  - "--enable-chunked-prefill"
+  - "--async-scheduling"
+  - "--enable-prefix-caching"
+  - "--speculative-config"
+  - '{"method":"mtp","num_speculative_tokens":3,"moe_backend":"triton"}'

@@ -1,3 +1,4 @@
 .lmswitch
 running/
-lmswitch-usage.json
+logs/
+*lmswitch-usage.json

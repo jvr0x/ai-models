@@ -1,7 +1,0 @@
-runtime: llama
-model: "unsloth/Qwen3.6-35B-A3B-MTP-GGUF/Qwen3.6-35B-A3B-UD-Q8_K_XL.gguf"
-port: 8094
-ctx: 262144
-display_name: "Qwen3.6-35B-A3B MTP (Q8_K_XL)"
-mmproj: "unsloth/Qwen3.6-35B-A3B-MTP-GGUF/mmproj-BF16.gguf"
-extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

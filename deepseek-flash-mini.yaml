@@ -1,7 +1,0 @@
-runtime: llama
-model: "0xSero/DeepSeek-V4-Flash-162B-GGUF/DeepSeek-V4-Flash-Spark-Mini-Q2-REAP-ds4.gguf"
-port: 8101
-ctx: 131072
-display_name: "DeepSeek-V4-Flash Mini Q2-REAP"
-llama_bin: "/home/jvr0x/utils/llama.cpp-deepseek-v4-flash/build/bin/llama-server"
-extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]

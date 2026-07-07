@@ -1,53 +1,52 @@
+# lmswitch BENCH PROFILE of Ornith-1.0-35B-AEON NVFP4 — hybrid Mamba/Attention.
+#
+# Benchmark profile for AEON-7/Ornith-1.0-35B-AEON-Ultimate-Uncensored-NVFP4.
+# Hybrid architecture (GatedDeltaNet SSM + full attention), NVFP4 via
+# compressed-tensors. Served via vLLM/AEON with DFlash spec-decode (n=6).
+#
+# Differences from daily-driver:
+#   gpu_memory_utilization: 0.60 -> 0.5   (kv-cache explicit, bounds non-KV)
+#   max_num_seqs:            16 -> 64      (don't cap below sweep ceiling)
+#   ctx:                    262144 -> 32768 (workload only needs ~1.3K)
+#   kv-cache-dtype: BF16 (vision tower forces it; cannot use fp8)
+#
+# Filename id = served-model-name = "ornith-35b-nvfp4-aeon7".
+# Place in your lmswitch ai-models/, then:
+#   lmswitch on ornith-35b-nvfp4-aeon7
+
 runtime: vllm
 model: "AEON-7/Ornith-1.0-35B-AEON-Ultimate-Uncensored-NVFP4"
-port: 8121
-ctx: 262144
-display_name: "Ornith-1.0-35B AEON Uncensored NVFP4 +DFlash"
+port: 8220
+ctx: 32768
+display_name: "Ornith-1.0-35B NVFP4 (AEON) [BENCH]"
 
-# GB10/sm_121a (Blackwell) AEON vLLM build.
 image: "ghcr.io/aeon-7/aeon-vllm-ultimate:latest"
-
-# This image's ENTRYPOINT is /bin/bash, so `entrypoint:` is required or lmswitch
-# runs `bash <model_dir>` -> exit 126 "Is a directory". Sets --entrypoint vllm + serve.
 entrypoint: "vllm serve"
-
-# GB10/sm_121a NVFP4 env the aeon recipes need (per QUICKSTART_DGX_SPARK.md).
 env:
   TORCH_CUDA_ARCH_LIST: "12.1a"
   CUTE_DSL_ARCH: "sm_121a"
   VLLM_USE_FLASHINFER_SAMPLER: "1"
   PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
 
-# Per the model's QUICKSTART_DGX_SPARK.md (2026-06-28 DFlash patch): 0.60 is the
-# safe value with DFlash n=6 on the unified pool (was 0.70; the patch lowered it
-# to avoid unified-memory crashes). Stop the always-on llama-servers first
-# (lmswitch off ...) or it will OOM/thrash the 128 GB pool.
-gpu_memory_utilization: 0.60
-max_num_seqs: 16
+gpu_memory_utilization: 0.5
+max_num_seqs: 64
 enforce_eager: false
-
-tool_call_parser: "qwen3_coder"     # Qwen3 XML tool calls
-reasoning_parser: "qwen3"           # split <think> reasoning_content
+tool_call_parser: "qwen3_coder"
+reasoning_parser: "qwen3"
 trust_remote_code: true
-attention_backend: "flash_attn"     # main model; DFlash drafter keeps its default
+attention_backend: "flash_attn"
 
-# extra_args run INSIDE the container, appended last.
-#  - NVFP4 weights are nvfp4-pack-quantized (compressed-tensors), NOT modelopt.
-#  - --mamba-cache-dtype float32: precision for the GatedDeltaNet (SSM) state — required for this arch.
-#  - Do NOT set --kv-cache-dtype fp8: the vision tower forces BF16 KV.
-#  - DFlash drafter: use AEON-7/AEON-DFlash-Qwen3.6-35B-A3B — the 2026-06-28 patch's
-#    RECOMMENDED drafter (all-full-attention, drop-in, NO hotfix image, ~3.71 tok/step).
-#    NOT z-lab/Qwen3.6-35B-A3B-DFlash: its sliding-window-attention layers trip a
-#    KV-page-size assert on this hybrid arch and would need a custom hotfix image.
-#    Referenced by HF id; lmswitch mounts ~/.cache/huggingface/hub so vLLM resolves
-#    it from cache. n=6 is the single-stream throughput peak per the QuickStart.
 extra_args:
+  - "--kv-cache-memory-bytes"
+  - "34359738368"                  # 32 GiB — explicit KV cap
+  - "--kv-cache-dtype"
+  - "bfloat16"                       # vision tower forces BF16 KV
   - "--quantization"
   - "compressed-tensors"
   - "--mamba-cache-dtype"
   - "float32"
   - "--max-num-batched-tokens"
-  - "16384"
+  - "8192"
   - "--enable-chunked-prefill"
   - "--enable-prefix-caching"
   - "--speculative-config"

@@ -3,4 +3,7 @@ model: "google/gemma-4-26B-A4B-it"
 port: 8112
 ctx: 131072
 display_name: "Gemma-4-26B-A4B Instruct"
-runtime: "vllm"
+# bf16 weights are 48.5 GiB; lmswitch's default 0.15 (~18 GiB on GB10) left
+# KV cache at -30.5 GiB and the engine died. 0.65 = ~80 GiB -> ~31 GiB KV,
+# enough for the full 131k context.
+gpu_memory_utilization: 0.65
