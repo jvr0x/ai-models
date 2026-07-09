@@ -1,0 +1,47 @@
+# lmswitch recipe for NVIDIA Nemotron-3-Super-120B-A12B-NVFP4 on 1× DGX Spark.
+# Hybrid Mamba-2 + LatentMoE + attention + MTP — 120B total / 12B active, NVFP4 weights.
+# ~75G weights: solo only — stop the always-on llama-servers first.
+# Mixed-precision modelopt checkpoint (NVFP4 + FP8 layers) — flashinfer_cutlass MoE required.
+runtime: vllm
+model: "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+port: 8126
+ctx: 524288
+display_name: "Nemotron-3-Super-120B NVFP4"
+gpu_memory_utilization: 0.85
+max_num_seqs: 4
+load_format: "auto"
+enforce_eager: true
+tool_call_parser: "qwen3_coder"
+reasoning_parser: "super_v3"
+reasoning_parser_plugin: "/app/super_v3_reasoning_parser.py"
+trust_remote_code: true
+ready_timeout: 900
+
+extra_mounts:
+  - "~/models/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4/super_v3_reasoning_parser.py:/app/super_v3_reasoning_parser.py:ro"
+
+env:
+  TORCH_CUDA_ARCH_LIST: "12.1a"
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+  NVIDIA_TF32_OVERRIDE: "1"
+  TORCH_ALLOW_TF32_CUBLAS_OVERRIDE: "1"
+  VLLM_NVFP4_GEMM_BACKEND: "marlin"
+  VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+
+extra_args:
+  - "--mamba-backend"
+  - "flashinfer"
+  - "--async-scheduling"
+  - "--speculative-config"
+  - '{"method":"mtp","num_speculative_tokens":3}'
+  - "--enable-auto-tool-choice"
+  - "--enable-prefix-caching"
+  - "--max-num-batched-tokens"
+  - "8192"
+  - "--moe-backend"
+  - "flashinfer_cutlass"
+  - "--enable-chunked-prefill"
+  - "--kv-cache-dtype"
+  - "fp8"
+  - "--mamba_ssm_cache_dtype"
+  - "float16"
