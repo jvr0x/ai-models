@@ -5,7 +5,7 @@ ctx: 262144
 display_name: "Qwen3.6-27B AEON Uncensored NVFP4 +DFlash"
 
 # AEON GB10/sm_121a vLLM 0.23 build. ENTRYPOINT is /bin/bash -> needs entrypoint:.
-image: "ghcr.io/aeon-7/aeon-vllm-ultimate:latest"
+image: "ghcr.io/aeon-7/aeon-vllm-ultimate:2026-07-14-v0.25.0"
 entrypoint: "vllm serve"
 env:
   TORCH_CUDA_ARCH_LIST: "12.1a"

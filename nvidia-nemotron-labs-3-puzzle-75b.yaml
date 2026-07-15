@@ -1,0 +1,38 @@
+# lmswitch recipe for NVIDIA Nemotron-Labs-3-Puzzle-75B-A9B-NVFP4 on 1× DGX Spark.
+# Hybrid Mamba2 + LatentMoE + attention — 75.3B total / ~9.3B active, NVFP4 weights.
+# Daily driver: joeynyc-style flags on stock vLLM image (cu130-nightly), MTP×3, 4 seqs.
+# moe-backend flashinfer_cutlass — required for mixed-precision NVFP4 + BF16 MoE layers.
+# ctx 262144 = checkpoint max_position_embeddings (longest supported context).
+runtime: vllm
+model: "nvidia/NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B-NVFP4"
+port: 8125
+ctx: 262144
+display_name: "Nemotron-Labs-3-Puzzle-75B-A9B NVFP4"
+gpu_memory_utilization: 0.88
+max_num_seqs: 4
+load_format: "auto"
+enforce_eager: true
+tool_call_parser: "qwen3_coder"
+reasoning_parser: "nemotron_v3"
+trust_remote_code: true
+ready_timeout: 900
+
+env:
+  TORCH_CUDA_ARCH_LIST: "12.1a"
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+  NVIDIA_TF32_OVERRIDE: "1"
+  TORCH_ALLOW_TF32_CUBLAS_OVERRIDE: "1"
+
+extra_args:
+  - "--mamba-backend"
+  - "flashinfer"
+  - "--async-scheduling"
+  - "--speculative-config"
+  - '{"method":"mtp","num_speculative_tokens":3}'
+  - "--enable-auto-tool-choice"
+  - "--enable-prefix-caching"
+  - "--max-num-batched-tokens"
+  - "8192"
+  - "--moe-backend"
+  - "flashinfer_cutlass"
+  - "--enable-chunked-prefill"

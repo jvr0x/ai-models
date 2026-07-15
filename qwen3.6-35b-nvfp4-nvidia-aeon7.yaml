@@ -10,7 +10,7 @@ display_name: "Qwen3.6-35B-A3B NVFP4 (NVIDIA)"
 # independent of --moe-backend / --quantization). The AEON image is vLLM 0.23.0
 # built for this exact qwen3_5_moe arch on GB10/sm_121a, so we serve the NVIDIA
 # modelopt checkpoint on it too. ENTRYPOINT is /bin/bash -> needs entrypoint:.
-image: "ghcr.io/aeon-7/aeon-vllm-ultimate:latest"
+image: "ghcr.io/aeon-7/aeon-vllm-ultimate:2026-07-14-v0.25.0"
 entrypoint: "vllm serve"
 
 # GB10/sm_121a env for the AEON build + NVFP4 alloc tuning.

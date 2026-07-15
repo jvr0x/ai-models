@@ -1,0 +1,43 @@
+# lmswitch recipe for Qwen3.6-27B-NVFP4 (unsloth) on 1× DGX Spark.
+# Qwen3_5ForConditionalGeneration — dense (non-MoE) architecture, NVFP4 quantized.
+# ~21.8GB weights, 5 safetensors shards.
+# Uses AEON sm_121a-optimized vLLM image with fastsafetensors loader.
+# Dense model — can handle moderate concurrency.
+# MTP spec-decode enabled (2 tokens, per unsloth HF docs).
+#
+# Filename id = served-model-name = "qwen3.6-27b-nvfp4-unsloth".
+# Place in your lmswitch ai-models/, then:
+#   lmswitch on qwen3.6-27b-nvfp4-unsloth
+
+runtime: vllm
+model: "unsloth/Qwen3.6-27B-NVFP4"
+port: 8128
+ctx: 32768
+display_name: "Qwen3.6-27B NVFP4 [UNSLOTH]"
+
+image: "ghcr.io/aeon-7/aeon-vllm-ultimate:2026-07-14-v0.25.0"
+entrypoint: "vllm serve"
+env:
+  TORCH_CUDA_ARCH_LIST: "12.1a"
+  CUTE_DSL_ARCH: "sm_121a"
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+
+gpu_memory_utilization: 0.85
+max_num_seqs: 32
+load_format: "fastsafetensors"
+trust_remote_code: true
+enforce_eager: false
+tool_call_parser: "qwen3_xml"
+reasoning_parser: "qwen3"
+attention_backend: "flashinfer"
+
+extra_args:
+  - "--kv-cache-dtype"
+  - "fp8"
+  - "--max-num-batched-tokens"
+  - "8192"
+  - "--enable-chunked-prefill"
+  - "--enable-prefix-caching"
+  - "--async-scheduling"
+  - "--speculative-config"
+  - '{"method":"mtp","num_speculative_tokens":2,"moe_backend":"triton"}'
