@@ -1,0 +1,36 @@
+# Gemma-4-12B-IT NVFP4 (Unsloth) — small-footprint vLLM profile.
+#
+# Deliberately sized to coexist with a running llama-server / other model:
+# weights are only 9.3 GB, so 0.15 (~18.2 GiB of the 121 GiB GB10 unified pool)
+# leaves ~9 GiB for KV + activations + the multimodal encoder cache.
+# Sibling gemma-4-26b-a4b-it.yaml documents the failure mode when 0.15 is too
+# small: KV budget goes negative and the engine dies at startup.
+#
+# ctx is intentionally conservative. gemma4_unified is mostly sliding_attention
+# (window 1024) with 8 full_attention layers, but whether vLLM's implementation
+# honours the sliding window changes KV/token by ~1000x:
+#   - sliding honoured   -> ~1 GiB at 32k, 131072 ctx is free
+#   - all 48 layers dense (8 kv heads x head_dim 256) -> 0.375 MiB/tok,
+#     i.e. 12.3 GiB at 32k, which does NOT fit in the headroom above.
+# 16384 is safe in the worst case (~6.1 GiB). To raise it, read the
+# `GPU KV cache size: N tokens` line in `docker logs vllm-gemma-4-12b-it-nvfp4`
+# on the first launch — that number tells you which regime you're in.
+runtime: "vllm"
+model: "unsloth/gemma-4-12b-it-NVFP4"
+port: 8116
+ctx: 16384
+display_name: "Gemma-4-12B-IT NVFP4 (Unsloth)"
+gpu_memory_utilization: 0.15
+# Activation memory scales with concurrency; 4 is enough for interactive use and
+# keeps the footprint small (default is 32).
+max_num_seqs: 4
+# Gemma 4 Unified is image + audio + video. Bounding the per-prompt media count
+# bounds the multimodal encoder cache, which is an *uncounted* allocation on
+# GB10 (see the cudagraph-capture-ceiling note: it is what hard-reset the box on
+# the 122B NVFP4 run). enforce_eager stays at lmswitch's default (true) for the
+# same reason — no CUDA-graph capture memory outside the KV budget.
+limit_mm_per_prompt: '{"image":1,"audio":1,"video":1}'
+# NOT verified: whether stock vllm/vllm-openai:cu130-nightly registers the
+# `gemma4_unified` arch. If startup fails with "not supported for now", the fix
+# is a newer image, not a flag. trust_remote_code is deliberately absent — the
+# repo ships no modeling_*.py, so it would buy nothing.

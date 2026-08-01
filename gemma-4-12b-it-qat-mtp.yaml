@@ -1,0 +1,23 @@
+# Gemma-4-12B-IT QAT GGUF (Unsloth) — vision + MTP speculative decoding.
+#
+# QAT UD-Q4_K_XL target (6.7 GB) + mmproj-F16 for images. Requires a llama.cpp
+# built after 2026-06-07 (PR #23398) for the `gemma4-assistant` drafter arch;
+# the local build (9df06805e, 2026-06-26) has both LLM_ARCH_GEMMA4 and
+# LLM_ARCH_GEMMA4_ASSISTANT.
+runtime: llama
+model: "unsloth/gemma-4-12B-it-qat-GGUF/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf"
+port: 8117
+ctx: 65536
+display_name: "Gemma-4-12B-IT QAT Q4 MTP"
+mmproj: "unsloth/gemma-4-12B-it-qat-GGUF/mmproj-F16.gguf"
+# MTP drafter: the repo-root "smart Q4_0" (0.25 GB), the variant Unsloth
+# recommends. -hf auto-discovery of the sibling file cannot fire here because
+# lmswitch passes --model with a local path, so the drafter is named explicitly
+# and, being a raw llama-server arg (host process, no container), takes an
+# absolute path. Upstream reports ~0.51 draft acceptance — a real speedup, but
+# well short of the ~93% the embedded-head qwen3.6-35b-q8-mtp recipe gets.
+# -fa on + q8_0 KV is the standard GB10 combo (quantized KV requires flash-attn).
+extra_args: ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0",
+  "--spec-type", "draft-mtp",
+  "--spec-draft-model", "/home/jvr0x/models/unsloth/gemma-4-12B-it-qat-GGUF/mtp-gemma-4-12B-it.gguf",
+  "--spec-draft-n-max", "4"]
