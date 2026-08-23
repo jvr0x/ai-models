@@ -1,0 +1,257 @@
+# DeepSeek V4 Flash 0731 — TP=2 across spark + gigabyte over CX7 (1M ctx).
+#
+# Ported verbatim (values, not plumbing) from the MiaAI-Lab two-Spark recipe:
+# https://github.com/MiaAI-Lab/DeepSeek-v4-Flash-DSpark-2x-DGX-Spark
+# (docker-compose.dspark.yml + docs/DEEPSEEK_V4_FLASH_0731.md, unreleased
+# CHANGELOG entry making 0731 the default checkpoint).
+#
+# 2026-08-20: re-synced to upstream `main` @ 21da90f. The substance of that
+# refresh is the hotfix suite — upstream's compose runs ~16 patches before
+# `exec vllm`, and this lane previously ran none of them. They are vendored
+# under ai-models/dspark-0731/patches/ (see its PROVENANCE.md) and applied by
+# the bootstrap; several are paired with env keys below (#26 <->
+# VLLM_PREFIX_CACHE_RETENTION_INTERVAL, #27 <-> DSPARK_MAX_INFLIGHT_PREFILLS)
+# and are a no-op without their patch. Also new here: the #65/#87 execute-model
+# timeout, the #27 prefill chunk cap, and prompt-token details.
+#
+# 2026-08-22: re-synced to upstream `main` @ 489af95. Three things that matter
+# to what this lane serves:
+#   * #109 (new patch) — encoder-only producer steps no longer emit a phantom
+#     token 0 or loop on empty output. Applied unconditionally.
+#   * #66 — the GPU thinking_token_budget patch is now OPT-IN and off by
+#     default; leaving it applied reproduced a decode cliff on omit-field
+#     traffic, which is exactly this lane's traffic. See
+#     DSPARK_ENABLE_ISSUE31_GPU_HOTFIX below.
+#   * #103/#108 — every shell backport is now a stage-then-atomic-commit
+#     transaction and every patcher fails closed, so the bootstrap no longer
+#     tolerates a perf backport that will not apply.
+# Also upstream but deliberately not taken here: DSPARK_API_KEYS multi-key auth
+# (lmswitch has no --api-key plumbing; this lane is unauthenticated on the CX7
+# fabric), the four NCCL GDR/merge passthrough knobs (no demonstrated effect on
+# GB10), and the NCCL_IB_GID_AUTO multi-HCA resolver (launcher-only — the
+# `nccl:` block below pins gid_index directly).
+#
+# Verified without serving: the whole chain applies to this pinned image with
+# 0 errors (`docker run --entrypoint bash <image>` over the bootstrap with the
+# exec line stubbed). Throughput/KV numbers below are still the 2026-08-01
+# measurements — nothing here has been re-benchmarked live.
+#
+# Supersedes deepseek-v4-flash-dspark-dual.yaml: different checkpoint
+# (0731 vs the DSpark preview), different engine (Anemll 0.1.1 vs the
+# r0b0tlab v0.26 SM121 package). Same DeepseekV4ForCausalLM architecture and
+# DSpark speculative structure; text-only, no vision tower.
+#
+# Their published two-Spark numbers on this exact profile: 75.4 tok/s C1 decode
+# @256-token prompt, 191.2 tok/s aggregate @c6, 1,857 tok/s prefill on a 14K
+# probe, plus a completed 900,000-token acceptance request (1,028s TTFT) that
+# proves the 1M profile beyond config metadata. With regular (non-breakable)
+# CUDA graphs: 95.9 tok/s C1 warm median, 340.5 tok/s aggregate @c6.
+#
+# Weights live ONCE on gigabyte at ~/models/deepseek-ai/DeepSeek-V4-Flash-0731
+# (revision 9e165c30e2704aec5d9d593cce3eebd58bbef1cb); spark reads them over the
+# NFS mount. The image must be `docker pull`ed on BOTH nodes (it already is).
+runtime: vllm-dual
+image: "ghcr.io/anemll/dspark-vllm-gx10:0.1.1"
+model: "deepseek-ai/DeepSeek-V4-Flash-0731"
+model_path: "~/models-gigabyte/deepseek-ai/DeepSeek-V4-Flash-0731"
+worker_model_path: "~/models/deepseek-ai/DeepSeek-V4-Flash-0731"
+port: 8888
+display_name: "DeepSeek-V4-Flash 0731 1M [DUAL 2x SPARK]"
+
+# The image ENTRYPOINT is not `vllm serve`, and 0731 needs its own encoder
+# installed into vLLM before import on both ranks — see the script header.
+entrypoint: "/dspark-bootstrap.sh"
+
+worker_host: Gigabyte
+master_addr: 10.100.224.2
+worker_ip: 10.100.224.1
+master_port: 25000
+nccl:
+  ifname: enp1s0f1np1
+  hca: rocep1s0f1
+  gid_index: 3
+
+ctx: 1048576
+max_num_seqs: 6
+# 0.80, not the 0.845 this recipe used before MTP went 3 -> 5: dropped to leave
+# headroom for cudagraph capture at the larger capture size
+# (max_num_seqs * (MTP + 1) = 36). The two move together — do not raise one
+# without the other. No --kv-cache-memory-bytes: the profiler sizes the pool,
+# which is how the 900K acceptance run was measured.
+# Upstream tip serves 0.835 (~2.49M-token KV pool). We stay at 0.80 until a
+# live KV-sizing run on this pair says otherwise: graph capture is the
+# uncounted allocation that has hard-reset this box before, and the gap is
+# pool size, not correctness.
+gpu_memory_utilization: 0.80
+# Load-bearing: lmswitch's `_vllm_args` defaults --enforce-eager ON (single-node
+# convention). This profile's whole decode advantage is CUDA graphs.
+enforce_eager: false
+shm_size: 64g
+# Cold FlashInfer autotune + 48-shard TP=2 load over NFS on first start.
+ready_timeout: 3600
+# Boot model: systemd (user) supervises this lane via lmswitch@<name>.service,
+# and `lmswitch serve` blocks on the head container so a crash is restarted
+# instead of silently staying down. Only one dual model can serve at a time
+# (port 8888), and the local daily driver must stay off — a loaded GGUF shrinks
+# profiled free memory and 1M KV sizing fails.
+restart: always
+# The gate in dual_serve waits this long for dockerd, the ~/models-gigabyte NFS
+# mount and gigabyte's sshd before rank 0 starts. Generous: at cold boot the
+# peer is booting too, and the unit retries forever anyway.
+gate_timeout: 900
+
+extra_mounts:
+  - "~/utils/lmswitch/ai-models/scripts/dspark-0731-bootstrap.sh:/dspark-bootstrap.sh:ro"
+  # Upstream's runtime hotfix suite, vendored at commit 489af95. `extra_mounts`
+  # is symmetric with no per-node override, so this directory must exist,
+  # identical, on BOTH nodes — the mirror script rsyncs all of ~/utils/lmswitch.
+  # A missing/empty mount is fatal in the bootstrap by design: it would
+  # otherwise leave one rank serving unpatched vLLM after a clean boot.
+  - "~/utils/lmswitch/ai-models/dspark-0731/patches:/opt/dspark-patches:ro"
+  # Node-local caches. These must NOT live on the shared NFS export or the two
+  # nodes trample each other's artifacts; separate dirs from the v0.25/v0.26
+  # lanes so the engines never read each other's.
+  - "~/.cache/vllm-dspark-0731:/root/.cache/vllm"
+  - "~/.cache/dspark-0731-flashinfer:/cache/flashinfer-workspace"
+  # FlashInfer/TileLang JIT scratch (upstream's DSPARK_TMP_HOST) — per-node.
+  - "~/.cache/dspark-0731-tmp:/tmp"
+  # TileLang compiled-kernel cache. In-image default is ~/.tilelang/cache,
+  # which dies with the container and makes every recreate pay JIT again
+  # (upstream issue #65). Node-local, like the others.
+  - "~/.cache/dspark-0731-tilelang:/cache/tilelang-cache"
+
+env:
+  HF_HUB_OFFLINE: 1
+  TRANSFORMERS_OFFLINE: 1
+  HF_HUB_DISABLE_XET: 1
+  # The checkpoint is bind-mounted at /model, so the upstream HF-cache glob
+  # would find nothing. Without this the bootstrap silently no-ops and 0731
+  # reasoning-effort / tool-argument semantics are wrong on a clean-looking boot.
+  DSPARK_ENCODING_FILE: /model/encoding/encoding_dsv4.py
+  VLLM_ALLOW_LONG_MAX_MODEL_LEN: 1
+  VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: 256
+  # Issue #26: sparsify SWA prefix-cache checkpoints (one tail per 4096-token
+  # segment + replay boundary). Load-bearing WITH the #26 v2 coordinator patch
+  # — retention is what keeps warm hits large once SWA is allowed to shrink the
+  # common hit again. Without the patch this key alone does not fix the 32K+
+  # warm-cache collapse.
+  # (Both this key and VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS below are
+  # registered in this image's envs.py — checked in-image, no unknown-env
+  # warning, and the timeout's in-image default really is 300.)
+  VLLM_PREFIX_CACHE_RETENTION_INTERVAL: 4096
+  # Issues #65/#87: a mid-serve CuTeDSL/TileLang JIT can exceed the stock 300s
+  # sample_tokens RPC budget and kill EngineCore — on TP=2 that reads exactly
+  # like an NCCL wedge. 1800 rides out a worst-case compile; a real hang just
+  # surfaces later.
+  VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: 1800
+  # Read by the #27 hotfix (1-3). Anemll 0.1.1 rejects
+  # --max-num-partial-prefills, so this env is the only way to allow more than
+  # one in-flight chunked prefill. Upstream's live A/B: 32K x c4 per-stream
+  # decode 8.2 -> 24.6 tok/s, 256 x c6 aggregate unchanged.
+  # Since upstream #105 the value is parsed once at Scheduler construction, not
+  # per admission iteration — keep it an integer, or it silently falls back to
+  # max_num_partial_prefills (stock 1) with one warning.
+  DSPARK_MAX_INFLIGHT_PREFILLS: 2
+  # 1 = one compact scheduler line per step from the #43 patch. Off = no cost.
+  DSPARK_ISSUE43_SCHED_DIAG: 0
+  # Upstream's shipped default (off / low / high / max), mapped to
+  # --default-chat-template-kwargs by the bootstrap. Was hardcoded
+  # `{"thinking":false}` here as a local preference; now this lane serves what
+  # Mia's recipe serves. Per-request `chat_template_kwargs` still wins. Note
+  # that with DSPARK_ENABLE_ISSUE31_GPU_HOTFIX=0 (below, upstream's default)
+  # there is NO per-request `thinking_token_budget` escape hatch — a client
+  # sending that field gets HTTP 400 — so reasoning length is governed here and
+  # by the client's max_tokens.
+  # Cost of `max`: ~12.5k reasoning tokens on a moderate prompt upstream. Size
+  # client max_tokens in the tens of thousands, or a harness capping at a few
+  # hundred gets content: null / finish_reason: length. Set `low` or `off` here
+  # if that is the wrong trade for a given client.
+  DEFAULT_THINKING: max
+  # Client `stop` strings stay dormant inside <think> (harness stops otherwise
+  # kill a thinking request mid-reason and return content: null).
+  DSPARK_SUPPRESS_STOPS_IN_REASONING: 1
+  # #52/#53 assistant-final continuation: upstream default is OFF (stock
+  # rendering) since 2026-08-18. Set 1 only deliberately — the patcher is
+  # fail-closed and an ON boot that cannot patch refuses to serve.
+  DSPARK_ENABLE_ASSISTANT_FINAL_HOTFIX: 0
+  # #31 v2 GPU thinking_token_budget: upstream default is OFF since 2026-08-22
+  # (issue #66) — applying it by default reproduced a decode cliff on requests
+  # that omit the field, and every request on this lane omits it. 0 = stock V2
+  # sampler; a client sending `thinking_token_budget` gets HTTP 400. Set 1 and
+  # recreate the containers only if a client actually needs the field; the
+  # patcher is fail-closed, so an ON boot that cannot patch refuses to serve.
+  DSPARK_ENABLE_ISSUE31_GPU_HOTFIX: 0
+  VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: 0
+  VLLM_USE_FLASHINFER_SAMPLER: 1
+  # 0, not 1: Anemll 0.1.1 auto-enables breakable graphs for DeepSeek V4 when
+  # this key is absent. Opting out keeps regular CUDA graphs (not eager) and is
+  # worth +28.6% C1 decode / +13.1% C2 aggregate in upstream's matched probe.
+  VLLM_USE_BREAKABLE_CUDAGRAPH: 0
+  VLLM_USE_B12X_MOE: 1
+  VLLM_B12X_W4A16_FORCE_BLOCKS_PER_SM: 0
+  VLLM_B12X_W4A16_FORCE_BLOCKS_MAX_M: 16
+  TORCH_CUDA_ARCH_LIST: 12.1a
+  FLASHINFER_CUDA_ARCH_LIST: 12.1a
+  # Targets CuTeDSL kernel compilation at GB10; without it b12x/CuTeDSL may JIT
+  # a slower W4A16 fused MoE path mid-inference instead of GB10-native kernels.
+  CUTE_DSL_ARCH: sm_121a
+  FLASHINFER_DISABLE_VERSION_CHECK: 1
+  FLASHINFER_WORKSPACE_BASE: /cache/flashinfer-workspace
+  TILELANG_CLEANUP_TEMP_FILES: 1
+  # Persist compiled TileLang kernels on the node-local mount above. Upstream
+  # puts this on their HF-cache volume; this lane has no HF cache mounted and
+  # the cache must stay per-node either way.
+  TILELANG_CACHE_DIR: /cache/tilelang-cache
+  DG_JIT_USE_NVRTC: 0
+  DG_JIT_NVCC_COMPILER: /usr/local/cuda/bin/nvcc
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+  NCCL_CROSS_NIC: 1
+  NCCL_IGNORE_CPU_AFFINITY: 1
+  NCCL_DEBUG: WARN
+  NCCL_NVLS_ENABLE: 0
+  NCCL_IB_ADDR_FAMILY: AF_INET
+  NCCL_IB_ROCE_VERSION_NUM: 2
+  # NCCL_NET/IB_DISABLE/IB_HCA/SOCKET_IFNAME/GLOO_SOCKET_IFNAME/TP_SOCKET_IFNAME
+  # /IB_GID_INDEX/CUMEM_ENABLE/VLLM_HOST_IP are emitted by the vllm-dual runtime
+  # from the `nccl:` block above.
+
+extra_args:
+  - "--trust-remote-code"
+  - "--pipeline-parallel-size=1"
+  - "--kv-cache-dtype=nvfp4_ds_mla"
+  - "--block-size=256"
+  - "--max-num-batched-tokens=8192"
+  # Issue #27 chunk cap: bound one prefill chunk so decode lanes keep leftover
+  # budget in the same step. 0 lets a single long prefill eat the whole batch
+  # and starves decode to the ~8 tok/s floor.
+  - "--long-prefill-token-threshold=1024"
+  # max_num_seqs * (MTP + 1) = 6 * 6, upstream's formula. Explicit because the
+  # engine default is min(max_num_seqs * 2, 512) = 12 here, which is not this
+  # profile's shape. Note the engine then truncates 36 -> 32 (capture sizes end
+  # up [1,2,4,8,16,24,32]) and says so at boot; upstream hits the same ceiling,
+  # and the util 0.80 headroom is sized for it either way.
+  - "--max-cudagraph-capture-size=36"
+  - "--enable-prefix-caching"
+  # Per-request cached/prefill token breakdown in `usage` — the only reliable
+  # way to score prefix-cache behaviour and decode rate (SSE chunk counting
+  # undercounts by ~4.5x).
+  - "--enable-prompt-tokens-details"
+  - "--async-scheduling"
+  - "--enable-chunked-prefill"
+  # k=5 because the checkpoint's dspark_block_size is 5; k<5 silently truncates
+  # draft blocks on this image. draft_sample_method is upstream's, not a default.
+  # Upstream 2026-08-20 lifted draft_sample_method into a DRAFT_SAMPLE_METHOD
+  # env (same "probabilistic" default) so the official model-card pairing
+  # k=7 + "greedy" (their issue #84) can be A/B'd without editing compose. Both
+  # halves are inline here, so that env is redundant — but the A/B is open and
+  # untested on this pair: k=7 does not conflict with the k>=5 floor above.
+  - "--speculative-config={\"method\":\"dspark\",\"num_speculative_tokens\":5,\"draft_sample_method\":\"probabilistic\"}"
+  - "--tokenizer-mode=deepseek_v4"
+  - "--distributed-executor-backend=mp"
+  - "--moe-backend=flashinfer_b12x"
+  - "--enable-flashinfer-autotune"
+  - "--tool-call-parser=deepseek_v4"
+  - "--enable-auto-tool-choice"
+  - "--reasoning-parser=deepseek_v4"
+  - "--reasoning-config={\"reasoning_parser\":\"deepseek_v4\",\"reasoning_start_str\":\"<think>\",\"reasoning_end_str\":\"</think>\"}"
+  - "--generation-config=vllm"
