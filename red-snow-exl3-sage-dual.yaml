@@ -1,0 +1,58 @@
+# lmswitch job for RED-SNOW-5.3-FLASH EXL3 SAGE 4.91bpw across spark + gigabyte.
+#
+# GLM-5.3-Flash red-team model (Blackfrost-AI base + vcruz305 SAGE MixedK EXL3,
+# 99.7B params, 36 shards, ~199.6 GB). vLLM cannot load SAGE MixedK EXL3, so
+# this is an exllamav3-dual JOB (runtime: exllamav3-dual), not a server:
+# `lmswitch on red-snow-exl3-sage-dual` FROM SPARK starts rank 1 on gigabyte
+# over SSH, runs rank 0 locally with the prompt below, streams the output,
+# and stops both ranks when the generation finishes. port: 0 (no API, and it
+# keeps the job out of every sync target). No `lmswitch serve`/systemd.
+#
+# Values follow the checkpoint's DEPLOY.md: splits 0:23,23:45 (45 decoder
+# layers, layer 23 is a full indexer layer — the Glm5Next DSA split rule),
+# ctx 8192 with Q4 cache for the first run. TCP transport for bring-up
+# (needs TCP 29650 on gigabyte, 29651 on spark reachable); switch to
+# transport: nccl + the nccl: block once RoCE is verified on both nodes
+# (rendezvous then uses TCP 29657 on rank 0).
+#
+# Weights live ONCE on gigabyte (downloading there now — see
+# ~/models/vcruz305/RED-SNOW-5.3-FLASH-EXL3-SAGE-4.91bpw/.download.log).
+# Spark reads them over the CX7 NFS link; gigabyte reads its local copy.
+# Both nodes also need the pinned exllamav3 checkout (same rev):
+#   git clone https://github.com/vcruz305/exllamav3.git ~/exllamav3
+#   git -C ~/exllamav3 checkout --detach 764b4ad6c86c59052875ccb1c31e1daaa85813cb
+#   python -m pip install -r ~/exllamav3/requirements.txt && python -m pip install -e ~/exllamav3
+#
+# UNTESTED — no two-node load of this exact checkpoint is claimed yet
+# (DEPLOY.md: "runnable first-pass method, not a measured result").
+runtime: exllamav3-dual
+model: "vcruz305/RED-SNOW-5.3-FLASH-EXL3-SAGE-4.91bpw"
+port: 0
+display_name: "RED-SNOW-5.3-FLASH EXL3-SAGE 4.91bpw [DUAL 2x SPARK job]"
+
+model_path: "~/models-gigabyte/vcruz305/RED-SNOW-5.3-FLASH-EXL3-SAGE-4.91bpw"
+worker_model_path: "~/models/vcruz305/RED-SNOW-5.3-FLASH-EXL3-SAGE-4.91bpw"
+
+# --- head=spark, worker=gigabyte (start FROM SPARK) ---
+worker_host: Gigabyte
+master_addr: 10.100.224.2
+worker_ip: 10.100.224.1
+
+transport: tcp
+transport_port: 29650
+# NCCL over RoCE (opt-in after TCP bring-up passes):
+# transport: nccl
+# nccl:
+#   ifname: enp1s0f1np1
+#   hca: rocep1s0f1
+
+splits: "0:23,23:45"
+ctx: 8192
+cache_quant: "4"
+exllamav3_repo: "~/exllamav3"
+pin_commit: "764b4ad6c86c59052875ccb1c31e1daaa85813cb"
+job_timeout: 3600
+gate_timeout: 600
+
+prompt: "Explain pipeline parallelism in three sentences."
+max_new: 200
